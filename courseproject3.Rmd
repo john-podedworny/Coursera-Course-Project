@@ -1,0 +1,89 @@
+---
+title: "Applied Machine Learning Project - Exercise Classification"
+author: "John Podedworny"
+date: "28/08/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Project Overview
+
+The objective of this project is to develop a machine learning model for predicting the exercise class using the supplied exercise data. The write-up will cover the design process behind the model build, as well as an analysis of the accuracy of each model before making our final predictions.
+
+## Model Selection Process
+
+To ensure we get the best performance out of our final model, we will test a series of models and then pick the most accurate among them. The five different ML algorithms we will test are K Nearest Neighbours, SVM w/ Radial Kernel, Extreme Gradient Boosted Tree, Decision Tree, and Random Forest.
+
+We will begin by cleaning up our data and splitting into training & testing sets.The original testing set will be held out until the final predictions are made. Since there's over 19,000 rows in the training data set, we will split it into a sub-training set for model creation and a sub-testing set for model. We'll put 80% of the training data into sub-training leaving 20% for the sub-testing dataset.
+
+```{r, echo=FALSE}
+library(caret)
+library(readr)
+
+#Import data
+training <- read_csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", na=c("NA","#DIV/0!", ""))
+testing <- read_csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", na=c("NA","#DIV/0!", ""))
+
+#Remove null columns
+training <- training[,colSums(is.na(training)) == 0]
+testing <- testing[,colSums(is.na(testing)) == 0]
+
+#Drop irrelevant columns
+training <- training[,-c(1:7)]
+testing <- testing[,-c(1:7)]
+
+#Set seed
+set.seed(9999)
+
+#Split training into training and testing sets
+inTrain = createDataPartition(y=training$classe, p=0.8)[[1]]
+sub_training = training[inTrain,]
+sub_testing = training[-inTrain,]
+```
+
+## Model Analysis
+
+Now that we have our training & testing data set up we can begin training & assessing our different models.
+
+We'll use 5-fold cross validation when we train our models. The models will be trained using the caret train function and the appropriate algorithm. We model the outcome "classe" against all predictors.
+
+After training the models, we use each to predict classe for each observation in the sub-testing dataset. The confusion matrix of the predictions and the true labels show us the accuracy of each model.
+
+```{r}
+#Define the cross validation parameters
+train_control <- trainControl(method="cv", number=5)
+
+#Train the models
+knn_model <- train(classe~., data=sub_training, trControl=train_control, method="knn")
+svm_model <- train(classe~., data=sub_training, trControl=train_control, method="svmRadial", preProcess=c("center", "scale"))
+xgb_model <- train(classe~., data=sub_training, trControl=train_control, method="xgbTree")
+cart_model <- train(classe~., data=sub_training, trControl=train_control, method="rpart")
+rf_model <- train(classe~., data=sub_training, trControl=train_control, method="rf")
+
+#Make predictions on the sub_testing data
+knn_predictions <- predict(knn_model, sub_testing, type="raw")
+svm_predictions <- predict(svm_model, sub_testing, type="raw")
+xgb_predictions <- predict(xgb_model, sub_testing, type="raw")
+cart_predictions <- predict(cart_model, sub_testing, type="raw")
+rf_predictions <- predict(rf_model, sub_testing, type="raw")
+
+#Use confusion matrices to test accuracy
+confusionMatrix(knn_predictions, factor(sub_testing$classe))$overall[1]
+confusionMatrix(svm_predictions, factor(sub_testing$classe))$overall[1]
+confusionMatrix(xgb_predictions, factor(sub_testing$classe))$overall[1]
+confusionMatrix(cart_predictions, factor(sub_testing$classe))$overall[1]
+confusionMatrix(rf_predictions, factor(sub_testing$classe))$overall[1]
+```
+
+## Final Predictions
+
+As you can see the random forest model has the best accuracy at 0.9952 (99.5%) so we choose it to be the model we use to make our final predictions. Based on the model's accuracy we predict the out-of-sample error to be 0.0048 (0.5%). You can see the output of the model's final predictions below.
+
+```{r}
+#Make final predictions
+predictions <- predict(rf_model, testing, type="raw")
+predictions
+```
